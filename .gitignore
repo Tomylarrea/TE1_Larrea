@@ -1,3 +1,16 @@
+Debug/
+.metadata/
+.settings/
+RemoteSystemsTempFiles/
+ 
+*.chm
+*.settings.xml
+ 
+*.xml
+*.launch
+
+# Desarrollo en C
+
 # Prerequisites
 *.d
 
