@@ -1,3 +1,4 @@
+"./Core/Src/ANTR.o"
 "./Core/Src/DUT.o"
 "./Core/Src/IU_cfg.o"
 "./Core/Src/main.o"

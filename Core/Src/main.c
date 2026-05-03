@@ -23,7 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "IU_cfg.h"
 #include "DUT.h"
-
+#include "ANTR.h"
 
 
 
@@ -66,7 +66,7 @@ TIM_HandleTypeDef htim3;
 UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
-
+ANTR_Pulsador pulsador;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -132,8 +132,9 @@ int main(void)
 	MX_TIM3_Init();
 	MX_USART1_UART_Init();
 	/* USER CODE BEGIN 2 */
+	ANTR_iniciar(&pulsador, PULSADOR_GPIO_Port, PULSADOR_Pin, ANTR_PULLUP);
 	IU_iniciar();
-
+	ANTR_Boton evento = ANTR_Procesar(&pulsador);
 
 	/* USER CODE END 2 */
 
@@ -144,20 +145,24 @@ int main(void)
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
-		if (flag_IU == 1) {
-			if (flag_IU_iniciar == 1) {
-				flag_IU_iniciar = 0;
-				IU_iniciar();
-			}
-			IU_menu();
-		} else {
-			if (flag_IU_detener == 1) {
-				flag_IU_detener = 0;
-				IU_Detener();
-			}
 
+		evento = ANTR_Procesar(&pulsador);
 
+		if (evento == ANTR_PRESIONADO) {
+			if (flag_IU == 1) {
+				if (flag_IU_iniciar == 1) {
+					flag_IU_iniciar = 0;
+					IU_iniciar();
+				}
+				IU_menu();
+			} else {
+				if (flag_IU_detener == 1) {
+					flag_IU_detener = 0;
+					IU_Detener();
+				}
+			}
 		}
+
 
 	}
 	/* USER CODE END 3 */
