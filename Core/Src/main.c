@@ -88,14 +88,8 @@ volatile uint8_t flag_IU_detener = 0;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin == PULSADOR_Pin) {
-		if (flag_IU == 0){
-			flag_IU = 1;
-			flag_IU_iniciar = 1;
-		} else if (flag_IU == 1){
-			flag_IU = 0;
-			flag_IU_detener = 1;
+			ANTR_Flanco(&pulsador);
 		}
-	}
 }
 /* USER CODE END 0 */
 
@@ -107,7 +101,7 @@ int main(void)
 {
 
 	/* USER CODE BEGIN 1 */
-
+	ANTR_iniciar(&pulsador, PULSADOR_GPIO_Port, PULSADOR_Pin, ANTR_PULLUP);
 	/* USER CODE END 1 */
 
 	/* MCU Configuration--------------------------------------------------------*/
@@ -132,7 +126,6 @@ int main(void)
 	MX_TIM3_Init();
 	MX_USART1_UART_Init();
 	/* USER CODE BEGIN 2 */
-	ANTR_iniciar(&pulsador, PULSADOR_GPIO_Port, PULSADOR_Pin, ANTR_PULLUP);
 	IU_iniciar();
 	ANTR_Boton evento = ANTR_Procesar(&pulsador);
 
@@ -148,22 +141,33 @@ int main(void)
 
 		evento = ANTR_Procesar(&pulsador);
 
+
 		if (evento == ANTR_PRESIONADO) {
-			if (flag_IU == 1) {
-				if (flag_IU_iniciar == 1) {
-					flag_IU_iniciar = 0;
-					IU_iniciar();
-				}
-				IU_menu();
+			if (flag_IU == 0) {
+				flag_IU = 1;
+				flag_IU_iniciar = 1;
 			} else {
-				if (flag_IU_detener == 1) {
-					flag_IU_detener = 0;
-					IU_Detener();
-				}
+				flag_IU = 0;
+				flag_IU_detener = 1;
 			}
 		}
 
 
+		if (flag_IU == 1) {
+			if (flag_IU_iniciar == 1) {
+				flag_IU_iniciar = 0;
+				IU_iniciar();
+			}
+
+			IU_menu();
+
+		} else {
+			if (flag_IU_detener == 1) {
+				flag_IU_detener = 0;
+				IU_Detener();
+			}
+
+		}
 	}
 	/* USER CODE END 3 */
 }
