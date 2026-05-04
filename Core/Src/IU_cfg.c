@@ -102,7 +102,7 @@ void IU_menu(void) {
 
 		case SUBMENU_MODO:
 			if (rx_byte == '1') {
-				DUT_estado_modo = DUT_MODO_UNICO;
+				DUT_estado_modo = DUT_MODO_UNICO; flag_med_unica = 1;
 				estado_menu = MENU_PRINCIPAL;
 				imprimir_menu(estado_menu);
 			} else if (rx_byte == '2') {

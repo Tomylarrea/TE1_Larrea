@@ -65,6 +65,8 @@ void Error_Handler(void);
 #define GPIO10K_GPIO_Port GPIOA
 #define GPIO330R_Pin GPIO_PIN_5
 #define GPIO330R_GPIO_Port GPIOA
+#define GPIO_Descarga_Pin GPIO_PIN_5
+#define GPIO_Descarga_GPIO_Port GPIOB
 #define PULSADOR_Pin GPIO_PIN_6
 #define PULSADOR_GPIO_Port GPIOB
 #define PULSADOR_EXTI_IRQn EXTI9_5_IRQn

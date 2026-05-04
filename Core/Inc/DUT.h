@@ -21,6 +21,7 @@ typedef enum {
 extern DUT_parametro_t DUT_estado_parametro;
 extern DUT_parametro_t DUT_estado_modo;
 extern uint8_t flag_ADC;
+extern uint8_t flag_med_unica;
 
 
 void DUT_Iniciar();
