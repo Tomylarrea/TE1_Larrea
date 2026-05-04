@@ -144,7 +144,6 @@ int main(void)
 
   /* USER CODE BEGIN SysInit */
 
-	/* USER CODE END SysInit */
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
