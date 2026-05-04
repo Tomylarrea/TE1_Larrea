@@ -1,6 +1,21 @@
 #include "ANTR.h"
 #include "main.h"
 
+
+
+
+/*-------------------------------------------------------------
+
+	NOMENCLATURA DE PREFIJOS:
+
+	IU: función/variable declarada en el header de IU.h, librería de la interfaz de usuario.
+	DUT: función/variable declarada en el header DUT.h, librería del DUT.
+	ANTR: función/variable declarada en el header ANTR.h, librería antirrebote.
+	Sin prefijo: función/variable local de este .c
+
+-------------------------------------------------------------*/
+
+
 #define TIEMPO_REBOTE 20
 
 void ANTR_iniciar(ANTR_Pulsador *p, GPIO_TypeDef *port, uint16_t PIN, ANTR_Tipo_pull pull) {

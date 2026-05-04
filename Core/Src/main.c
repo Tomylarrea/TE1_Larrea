@@ -33,6 +33,7 @@
 
 	IU: función/variable declarada en el header de IU.h, librería de la interfaz de usuario.
 	DUT: función/variable declarada en el header DUT.h, librería del DUT.
+	ANTR: función/variable declarada en el header ANTR.h, librería antirrebote.
 	Sin prefijo: función/variable local de este .c
 
 -------------------------------------------------------------*/
@@ -82,14 +83,39 @@ static void MX_USART1_UART_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+// Banderas de la Interfaz de Usuario
+volatile uint8_t flag_IU = 0;
 volatile uint8_t flag_IU_iniciar = 0;
-volatile uint8_t flag_IU = 1;
 volatile uint8_t flag_IU_detener = 0;
+
+// Banderas del Instrumento (DUT)
+volatile uint8_t flag_medida = 1;
+volatile uint8_t flag_medida_iniciar = 1;
+volatile uint8_t flag_medida_detener = 0;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	if (GPIO_Pin == PULSADOR_Pin) {
-			ANTR_Flanco(&pulsador);
-		}
+		ANTR_Flanco(&pulsador);
+	}
+}
+
+void Set_Pin_State(uint16_t Pin, uint8_t to_high) {
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+	GPIO_InitStruct.Pin = Pin;
+
+	if (to_high) {
+		// Configuramos como salida para poder ponerlo en 3.3V
+		GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+		GPIO_InitStruct.Pull = GPIO_NOPULL;
+		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+		HAL_GPIO_WritePin(GPIOA, Pin, GPIO_PIN_SET);
+	} else {
+		// Configuramos como entrada (Alta Impedancia)
+		GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+		GPIO_InitStruct.Pull = GPIO_NOPULL;
+		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+	}
 }
 /* USER CODE END 0 */
 
@@ -126,9 +152,8 @@ int main(void)
 	MX_TIM3_Init();
 	MX_USART1_UART_Init();
 	/* USER CODE BEGIN 2 */
-	IU_iniciar();
+	//IU_iniciar();
 	ANTR_Boton evento = ANTR_Procesar(&pulsador);
-
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -138,36 +163,59 @@ int main(void)
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
-
 		evento = ANTR_Procesar(&pulsador);
 
-
 		if (evento == ANTR_PRESIONADO) {
-			if (flag_IU == 0) {
-				flag_IU = 1;
-				flag_IU_iniciar = 1;
-			} else {
-				flag_IU = 0;
-				flag_IU_detener = 1;
-			}
+		    if (flag_IU == 0) {
+		        // Sale de medición, entra al menú
+		        flag_IU = 1;
+		        flag_IU_iniciar = 1;
+
+		        flag_medida = 0;
+		        flag_medida_detener = 1;
+		    } else {
+		        // Sale del menú, entra a medición
+		        flag_IU = 0;
+		        flag_IU_detener = 1;
+
+		        flag_medida = 1;
+		        flag_medida_iniciar = 1;
+		    }
 		}
 
 
+		// --- BLOQUE DE EJECUCIÓN INTERFAZ ---
 		if (flag_IU == 1) {
-			if (flag_IU_iniciar == 1) {
-				flag_IU_iniciar = 0;
-				IU_iniciar();
-			}
+		    if (flag_IU_iniciar == 1) {
+		        flag_IU_iniciar = 0;
+		        IU_iniciar();
+		    }
+		    IU_menu();
+		} else {
 
-			IU_menu();
+		    if (flag_IU_detener == 1) {
+		        flag_IU_detener = 0;
+		        IU_Detener();
+		    }
+		}
+
+
+		// --- BLOQUE DE EJECUCIÓN MEDIDA ---
+		if (flag_medida == 1) {
+
+		    if (flag_medida_iniciar == 1) {
+		        flag_medida_iniciar = 0;
+		        DUT_Iniciar();
+		    }
 
 		} else {
-			if (flag_IU_detener == 1) {
-				flag_IU_detener = 0;
-				IU_Detener();
-			}
-
+		    if (flag_medida_detener == 1) {
+		        flag_medida_detener = 0;
+		        DUT_Detener();
+		    }
 		}
+
+
 	}
 	/* USER CODE END 3 */
 }
@@ -368,7 +416,7 @@ static void MX_GPIO_Init(void)
 
 	/*Configure GPIO pin : PULSADOR_Pin */
 	GPIO_InitStruct.Pin = PULSADOR_Pin;
-	GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
+	GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
 	GPIO_InitStruct.Pull = GPIO_PULLUP;
 	HAL_GPIO_Init(PULSADOR_GPIO_Port, &GPIO_InitStruct);
 

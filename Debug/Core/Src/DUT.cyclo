@@ -1,0 +1,6 @@
+../Core/Src/DUT.c:40:6:Set_Pin	2
+../Core/Src/DUT.c:59:6:HAL_ADC_ConvCpltCallback	2
+../Core/Src/DUT.c:68:6:DUT_Iniciar	1
+../Core/Src/DUT.c:74:6:DUT_Detener	1
+../Core/Src/DUT.c:80:6:DUT_Configurar	5
+../Core/Src/DUT.c:107:10:DUT_Medir	2

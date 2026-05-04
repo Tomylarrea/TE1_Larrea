@@ -15,6 +15,7 @@
 
 	IU: función/variable declarada en el header de IU.h, librería de la interfaz de usuario.
 	DUT: función/variable declarada en el header DUT.h, librería del DUT.
+	ANTR: función/variable declarada en el header ANTR.h, librería antirrebote.
 	Sin prefijo: función/variable local de este .c
 
 -------------------------------------------------------------*/
@@ -76,7 +77,7 @@ void IU_menu(void) {
 				imprimir_menu(estado_menu);
 			} else {
 				size = sprintf(str_tx, "\r\n%sOpcion invalida.%s\r\n",
-					(color==1)?"\033[31m":"", (color==1)?"\033[0m":"");
+						(color==1)?"\033[31m":"", (color==1)?"\033[0m":"");
 				HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 				imprimir_menu(estado_menu);
 			}
@@ -93,7 +94,7 @@ void IU_menu(void) {
 				imprimir_menu(estado_menu);
 			} else {
 				size = sprintf(str_tx, "\r\n%sOpcion invalida.%s\r\n",
-					(color==1)?"\033[31m":"", (color==1)?"\033[0m":"");
+						(color==1)?"\033[31m":"", (color==1)?"\033[0m":"");
 				HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 				imprimir_menu(estado_menu);
 			}
@@ -110,7 +111,7 @@ void IU_menu(void) {
 				imprimir_menu(estado_menu);
 			} else {
 				size = sprintf(str_tx, "\r\n%sOpcion invalida.%s\r\n",
-					(color==1)?"\033[31m":"", (color==1)?"\033[0m":"");
+						(color==1)?"\033[31m":"", (color==1)?"\033[0m":"");
 				HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 				imprimir_menu(estado_menu);
 			}
@@ -135,23 +136,23 @@ void imprimir_menu(menu_t menu) {
 	case MENU_PRINCIPAL:
 
 		size = sprintf(str_tx, "\r\nCONFIGURACION ACTUAL: %s%s%s - %s%s%s\r\n",
-			(color==1)?(DUT_estado_parametro==0?"\033[32m":"\033[35m"):"",
-			str_parametro[DUT_estado_parametro],
-			(color==1)?"\033[0m":"",
+				(color==1)?(DUT_estado_parametro==0?"\033[32m":"\033[35m"):"",
+						str_parametro[DUT_estado_parametro],
+						(color==1)?"\033[0m":"",
 
-			(color==1)?(DUT_estado_modo==0?"\033[34m":"\033[33m"):"",
-			str_modo[DUT_estado_modo],
-			(color==1)?"\033[0m":"");
+								(color==1)?(DUT_estado_modo==0?"\033[34m":"\033[33m"):"",
+										str_modo[DUT_estado_modo],
+										(color==1)?"\033[0m":"");
 		HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 
 		size = sprintf(str_tx, "1) modificar parametro (%sresistencia%s / %scapacitancia%s)\r\n",
-			(color==1)?"\033[32m":"", (color==1)?"\033[0m":"",
-			(color==1)?"\033[35m":"", (color==1)?"\033[0m":"");
+				(color==1)?"\033[32m":"", (color==1)?"\033[0m":"",
+						(color==1)?"\033[35m":"", (color==1)?"\033[0m":"");
 		HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 
 		size = sprintf(str_tx, "2) modificar modo (%smedida unica%s / %smedida periodica%s)\r\n",
-			(color==1)?"\033[34m":"", (color==1)?"\033[0m":"",
-			(color==1)?"\033[33m":"", (color==1)?"\033[0m":"");
+				(color==1)?"\033[34m":"", (color==1)?"\033[0m":"",
+						(color==1)?"\033[33m":"", (color==1)?"\033[0m":"");
 		HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 
 		size = sprintf(str_tx, "3) activar/desactivar color\r\n");
@@ -163,17 +164,17 @@ void imprimir_menu(menu_t menu) {
 
 	case SUBMENU_PARAMETRO:
 		size = sprintf(str_tx, "\r\nPARAMETRO: %s%s%s\r\n",
-			(color==1)?(DUT_estado_parametro==0?"\033[32m":"\033[35m"):"",
-			str_parametro[DUT_estado_parametro],
-			(color==1)?"\033[0m":"");
+				(color==1)?(DUT_estado_parametro==0?"\033[32m":"\033[35m"):"",
+						str_parametro[DUT_estado_parametro],
+						(color==1)?"\033[0m":"");
 		HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 
 		size = sprintf(str_tx, "1) %sresistencia%s\r\n",
-			(color==1)?"\033[32m":"", (color==1)?"\033[0m":"");
+				(color==1)?"\033[32m":"", (color==1)?"\033[0m":"");
 		HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 
 		size = sprintf(str_tx, "2) %scapacitancia%s\r\n",
-			(color==1)?"\033[35m":"", (color==1)?"\033[0m":"");
+				(color==1)?"\033[35m":"", (color==1)?"\033[0m":"");
 		HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 
 		size = sprintf(str_tx, "\r\nIngrese un parametro: \r\n");
@@ -182,17 +183,17 @@ void imprimir_menu(menu_t menu) {
 
 	case SUBMENU_MODO:
 		size = sprintf(str_tx, "\r\nMODO: %s%s%s\r\n",
-			(color==1)?(DUT_estado_modo==0?"\033[34m":"\033[33m"):"",
-			str_modo[DUT_estado_modo],
-			(color==1)?"\033[0m":"");
+				(color==1)?(DUT_estado_modo==0?"\033[34m":"\033[33m"):"",
+						str_modo[DUT_estado_modo],
+						(color==1)?"\033[0m":"");
 		HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 
 		size = sprintf(str_tx, "1) %smedida unica%s\r\n",
-			(color==1)?"\033[34m":"", (color==1)?"\033[0m":"");
+				(color==1)?"\033[34m":"", (color==1)?"\033[0m":"");
 		HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 
 		size = sprintf(str_tx, "2) %smedida periodica%s\r\n",
-			(color==1)?"\033[33m":"", (color==1)?"\033[0m":"");
+				(color==1)?"\033[33m":"", (color==1)?"\033[0m":"");
 		HAL_UART_Transmit(&huart1, (uint8_t*)str_tx, size, 100);
 
 		size = sprintf(str_tx, "\r\nIngrese un modo: \r\n");
