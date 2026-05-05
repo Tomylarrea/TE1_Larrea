@@ -90,10 +90,12 @@ static volatile uint32_t ticks_CAP = 0;
 
 typedef enum {
 	MEDIDA_1M,
-	MEDIDA_10K,
+	MEDIDA_10K,	// Estados para indicar qué pin se pone en alto en la medida
 	MEDIDA_330,
 	MEDIDA_OFF
 } tipo_medida_t;
+
+
 
 static tipo_medida_t medida_actual = MEDIDA_330;
 
@@ -266,7 +268,21 @@ void DUT_Medir(void) {
 			CAP_MIDIENDO
 		} estado_cap = CAP_ESPERANDO;
 
-		/* Tick guardado al entrar en CAP_DESCARGANDO, para el timeout */
+		/* -------------------------------------------------------------------------------------------
+
+		 *  CAP_ESPERANDO: espera el disparo según el modo antes de iniciar la descarga.
+		 *
+		 *  CAP_DESCARGANDO: aísla la resistencia de carga y conecta PB5 a GND para drenar el
+		 *  capacitor. Permanece así hasta que el ADC confirma tensión cercana a 0V Incluye timeout
+		 *  para evitar que se bloquee.
+		 *
+		 *  CAP_MIDIENDO: rehabilita el pin de la resistencia de escala y arranca el timer en una res
+		 *  más alta. Cuenta ticks hasta que el ADC supera el 63% de VCC, sabiendo que corresponde a
+		 *  tau = RC -> C = tau/R. Si el resultado está fuera del rango actual, descarga y reintenta con otro rango.
+		 *  Si no se puede con niguno de todos los rangos reporta FUERA DE ESCALA.
+		 *
+		 *-------------------------------------------------------------------------------------------*/
+
 		static uint32_t tick_descarga = 0;
 
 		switch (estado_cap) {
@@ -293,11 +309,11 @@ void DUT_Medir(void) {
 			break;
 
 			case CAP_DESCARGANDO:
-				DUT_Configurar(MEDIDA_OFF); /* Aísla la fuente de tensión    */
-				Descarga(1);                /* Drena el componente a masa     */
+				DUT_Configurar(MEDIDA_OFF);
+				Descarga(1);                /* pone el CAP a GND    */
 
 				if (medida_adc <= ADC_SAT_LOW) {
-					/* Descarga completa: continuar con la medición */
+					/* Descarga completa -> se continua con la medición */
 					Descarga(0);
 					DUT_Configurar(medida_actual);
 					estado_cap = CAP_MIDIENDO;
@@ -331,7 +347,7 @@ void DUT_Medir(void) {
 				}
 
 				if (HAL_GetTick() - tick_timeout >= timeout_ms) {
-					/* El capacitor no alcanzó el umbral: cambiar a rango superior */
+					/* El capacitor no alcanzó el umbral, cambia a rango superior */
 					timer_iniciado = 0;
 					Restaurar_Timer();
 
@@ -339,7 +355,7 @@ void DUT_Medir(void) {
 					case MEDIDA_330: medida_actual = MEDIDA_10K; break;
 					case MEDIDA_10K: medida_actual = MEDIDA_1M;  break;
 					case MEDIDA_1M:
-						/* Se agotaron todos los rangos */
+						/* No se pudo medir con ningún rango */
 						HAL_UART_Transmit(&huart1, (uint8_t*)"FUERA DE ESCALA\r\n", 17, 100);
 						medida_actual = MEDIDA_330;
 						Descarga(1);
@@ -356,7 +372,7 @@ void DUT_Medir(void) {
 					break;
 				}
 
-				/* Verificar con muestra fresca si el capacitor llegó al 63% de VCC */
+				/* ver si el capacitor llegó al 63% de VCC */
 				if (flag_ADC == 1) {
 					flag_ADC = 0;
 
@@ -365,8 +381,6 @@ void DUT_Medir(void) {
 						timer_iniciado = 0;
 						Restaurar_Timer();
 
-						/* Todos los rangos tienen el mismo periodo de tick: 10 µs
-						 * (72 MHz / (71+1) / (9+1) = 10 µs/tick)              */
 						const float ticks_xsegundo = 10e-6f;
 
 						float R_ohms;
@@ -380,7 +394,7 @@ void DUT_Medir(void) {
 						float cte_tiempo      = ticks * ticks_xsegundo;
 						float capacitancia_pF = (cte_tiempo / R_ohms) * 1e12f;
 
-						/* Verificar si conviene cambiar de rango */
+						// verifica si conviene cambiar de rango
 						tipo_medida_t nueva = medida_actual;
 						switch (medida_actual) {
 						case MEDIDA_1M:
@@ -412,10 +426,10 @@ void DUT_Medir(void) {
 					}
 				}
 				break;
-			} /* CAP_MIDIENDO */
-		} /* switch estado_cap */
+			}
+		}
 		break;
-	} /* DUT_PARAMETRO_CAPACITANCIA */
+	}
 
 	default:
 		break;
@@ -471,7 +485,7 @@ static void imprimir_resistencia(float res_Mohms) {
 
 	switch (medida_actual) {
 	case MEDIDA_1M: {
-		/* Convertir a kOhms para valores >= 1000 kOhms, si no en MOhms */
+		// Convertir a kOhms para valores >= 1000 kOhms, si no en MOhms
 		if (res_Mohms >= 1.0f) {
 			entero  = (int32_t)res_Mohms;
 			decimal = (int32_t)((res_Mohms - (float)entero) * 100);
@@ -515,11 +529,11 @@ static void imprimir_capacitancia(float pF) {
 	int32_t entero, decimal;
 
 	if (pF >= 1000000.0f) {
-		/* Mostrar en µF */
-		float uF = pF / 1000000.0f;
-		entero  = (int32_t)uF;
-		decimal = (int32_t)((uF - (float)entero) * 100);
-		len = sprintf(buffer, "%ld.%02ld uF\r\n", entero, decimal);
+	    /* Mostrar en µF */
+	    float uF = pF / 1000000.0f;
+	    entero  = (int32_t)uF;
+	    decimal = (int32_t)((uF - (float)entero) * 10);  // * 10 para 1 decimal
+	    len = sprintf(buffer, "%ld.%01ld uF\r\n", entero, decimal);
 	} else if (pF >= 1000.0f) {
 		/* Mostrar en nF */
 		float nF = pF / 1000.0f;
@@ -537,6 +551,7 @@ static void imprimir_capacitancia(float pF) {
 }
 
 static void Descarga(uint8_t activar) {
+	// Toggle para el pin PB5, que descarga el capacitor con una resistencia a GND.
 	GPIO_InitTypeDef GPIO_InitStruct = {0};
 	GPIO_InitStruct.Pin = GPIO_Descarga_Pin;
 	if (activar) {

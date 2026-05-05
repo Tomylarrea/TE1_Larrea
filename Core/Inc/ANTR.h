@@ -23,7 +23,7 @@ typedef enum {
     ANTR_ANTR      = 1
 } ANTR_Estado;
 
-// Estrucutura del pin configurado para el antirrebote
+// estrucutura del pin configurado para el antirrebote
 typedef struct {
     GPIO_TypeDef      *port;
     uint16_t           PIN;
