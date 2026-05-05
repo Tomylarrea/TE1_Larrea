@@ -102,7 +102,7 @@ void IU_menu(void) {
 
 		case SUBMENU_MODO:
 			if (rx_byte == '1') {
-				DUT_estado_modo = DUT_MODO_UNICO; flag_med_unica = 1;
+				DUT_estado_modo = DUT_MODO_UNICO;
 				estado_menu = MENU_PRINCIPAL;
 				imprimir_menu(estado_menu);
 			} else if (rx_byte == '2') {
@@ -126,9 +126,16 @@ void IU_iniciar(void){
 	flag_1er_llamado = 1;
 }
 
+// IU_cfg.c
+
 void IU_Detener(void){
-	flag_UART = 0;
-	HAL_UART_AbortReceive_IT(&huart1);
+    flag_UART = 0;
+    HAL_UART_AbortReceive_IT(&huart1);
+
+    // Al salir del menú, si el modo es único disparar la primera medición
+    if (DUT_estado_modo == DUT_MODO_UNICO) {
+        flag_med_unica = 1;
+    }
 }
 
 void imprimir_menu(menu_t menu) {

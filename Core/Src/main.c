@@ -84,13 +84,13 @@ static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN 0 */
 
 // Banderas de la Interfaz de Usuario
-volatile uint8_t flag_IU = 0;
-volatile uint8_t flag_IU_iniciar = 0;
+volatile uint8_t flag_IU = 1;
+volatile uint8_t flag_IU_iniciar = 1;
 volatile uint8_t flag_IU_detener = 0;
 
 // Banderas del Instrumento (DUT)
-volatile uint8_t flag_medida = 1;
-volatile uint8_t flag_medida_iniciar = 1;
+volatile uint8_t flag_medida = 0;
+volatile uint8_t flag_medida_iniciar = 0;
 volatile uint8_t flag_medida_detener = 0;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
@@ -154,7 +154,6 @@ int main(void)
   /* USER CODE BEGIN 2 */
 	//IU_iniciar();
 	ANTR_Boton evento = ANTR_Procesar(&pulsador);
-	char buffer[20];
 	uint32_t valor_adc;
   /* USER CODE END 2 */
 

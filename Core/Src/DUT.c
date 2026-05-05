@@ -18,6 +18,11 @@
 #define ADC_SAT_HIGH      4000u
 #define ADC_SAT_LOW       200u
 
+/* Timeout máximo esperando que el capacitor descargue (ms).
+ * Con 330R y capacitores grandes puede necesitar varios segundos;
+ * se elige un valor conservador. Ajustar según el rango esperado. */
+#define TIMEOUT_DESCARGA_MS  5000u
+
 /*-------------------------------------------------------------
 
 	NOMENCLATURA DE PREFIJOS:
@@ -29,8 +34,8 @@
 
 -------------------------------------------------------------*/
 
-DUT_parametro_t DUT_estado_parametro = DUT_PARAMETRO_CAPACITANCIA;
-DUT_parametro_t DUT_estado_modo = DUT_MODO_PERIODICO;
+DUT_parametro_t DUT_estado_parametro = DUT_PARAMETRO_RESISTENCIA;
+DUT_modo_t      DUT_estado_modo      = DUT_MODO_UNICO;
 uint8_t flag_ADC = 0;
 uint8_t flag_med_unica = 0;
 uint32_t resultado;
@@ -128,22 +133,10 @@ void DUT_Configurar(tipo_medida_t medida) {
 static void Configurar_Timer(void) {
 	HAL_TIM_Base_Stop_IT(&htim3);
 
-	switch (medida_actual) {
-	case MEDIDA_1M:
-		htim3.Init.Prescaler = 71;
-		htim3.Init.Period    = 9;
-		break;
-	case MEDIDA_10K:
-		htim3.Init.Prescaler = 71;
-		htim3.Init.Period    = 9;
-		break;
-	case MEDIDA_330:
-		htim3.Init.Prescaler = 71;
-		htim3.Init.Period    = 9;
-		break;
-	default:
-		break;
-	}
+	/* Todos los rangos usan el mismo periodo base: 10 µs/tick
+	 * (72 MHz / (71+1) / (9+1) = 100 000 ticks/s → 10 µs/tick) */
+	htim3.Init.Prescaler = 71;
+	htim3.Init.Period    = 9;
 
 	HAL_TIM_Base_Init(&htim3);
 	HAL_TIM_Base_Start_IT(&htim3);
@@ -230,18 +223,25 @@ uint32_t DUT_Medir(void) {
 			CAP_MIDIENDO
 		} estado_cap = CAP_ESPERANDO;
 
+		/* Tick guardado al entrar en CAP_DESCARGANDO, para el timeout */
+		static uint32_t tick_descarga = 0;
+
 		switch (estado_cap) {
 		case CAP_ESPERANDO:
 			switch (DUT_estado_modo) {
 			case DUT_MODO_UNICO:
 				if (flag_med_unica == 1) {
+					HAL_UART_Transmit(&huart1, (uint8_t*)"Midiendo...\r\n", 13, 100);
 					flag_med_unica = 0;
+					tick_descarga = HAL_GetTick();
 					estado_cap = CAP_DESCARGANDO;
 				}
+
 				break;
 			case DUT_MODO_PERIODICO:
 				if (HAL_GetTick() - tick_periodico >= 1000) {
 					tick_periodico = HAL_GetTick();
+					tick_descarga  = HAL_GetTick();
 					estado_cap = CAP_DESCARGANDO;
 				}
 				break;
@@ -250,67 +250,81 @@ uint32_t DUT_Medir(void) {
 			}
 			break;
 
-			case CAP_DESCARGANDO:
-				DUT_Configurar(MEDIDA_OFF); // Aísla la fuente de tensión
-				Descarga(1);                // Drena el componente a masa
-				if (medida_adc <= ADC_SAT_LOW) {
-					Descarga(0);            // Aísla el circuito de descarga
-					DUT_Configurar(medida_actual); // Reconecta la resistencia de escala
-					estado_cap = CAP_MIDIENDO;
+		case CAP_DESCARGANDO:
+			DUT_Configurar(MEDIDA_OFF); /* Aísla la fuente de tensión    */
+			Descarga(1);                /* Drena el componente a masa     */
+
+			if (medida_adc <= ADC_SAT_LOW) {
+				/* Descarga completa: continuar con la medición */
+				Descarga(0);
+				DUT_Configurar(medida_actual);
+				estado_cap = CAP_MIDIENDO;
+			} else if (HAL_GetTick() - tick_descarga >= TIMEOUT_DESCARGA_MS) {
+				/* Timeout: el capacitor no descargó en el tiempo esperado.
+				 * Se vuelve al estado inicial para no quedar bloqueado. */
+				Descarga(0);
+				medida_actual = MEDIDA_330;
+				DUT_Configurar(medida_actual);
+				estado_cap = CAP_ESPERANDO;
+			}
+			break;
+
+		case CAP_MIDIENDO: {
+			static uint8_t  timer_iniciado = 0;
+			static uint32_t tick_timeout   = 0;
+
+			if (!timer_iniciado) {
+				ticks_CAP    = 0;
+				tick_timeout = HAL_GetTick();
+				Configurar_Timer();
+				timer_iniciado = 1;
+			}
+
+			uint32_t timeout_ms;
+			switch (medida_actual) {
+			case MEDIDA_1M:  timeout_ms = 15000; break;
+			case MEDIDA_10K: timeout_ms =  5000; break;
+			case MEDIDA_330: timeout_ms =  5000; break;
+			default:         timeout_ms =  5000; break;
+			}
+
+			if (HAL_GetTick() - tick_timeout >= timeout_ms) {
+				/* El capacitor no alcanzó el umbral: cambiar a rango superior */
+				timer_iniciado = 0;
+				Restaurar_Timer();
+
+				switch (medida_actual) {
+				case MEDIDA_330: medida_actual = MEDIDA_10K; break;
+				case MEDIDA_10K: medida_actual = MEDIDA_1M;  break;
+				case MEDIDA_1M:  medida_actual = MEDIDA_OFF; break;
+				default: break;
+				}
+
+				DUT_Configurar(medida_actual);
+
+				if (medida_actual == MEDIDA_OFF) {
+					Descarga(1);
+					medida_actual = MEDIDA_330; /* resetear para la próxima medición */
+					estado_cap = CAP_ESPERANDO;
+				} else {
+					tick_descarga = HAL_GetTick();
+					estado_cap = CAP_DESCARGANDO;
 				}
 				break;
+			}
 
-			case CAP_MIDIENDO: {
-				static uint8_t timer_iniciado = 0;
-				static uint32_t tick_timeout = 0;
-
-				if (!timer_iniciado) {
-					ticks_CAP = 0;
-					tick_timeout = HAL_GetTick();
-					Configurar_Timer();
-					timer_iniciado = 1;
-				}
-
-				uint32_t timeout_ms;
-				switch (medida_actual) {
-				case MEDIDA_1M:  timeout_ms = 15000;  break;
-				case MEDIDA_10K: timeout_ms = 5000;  break;
-				case MEDIDA_330: timeout_ms = 5000; break;
-				default:         timeout_ms = 5000;  break;
-				}
-
-				if (HAL_GetTick() - tick_timeout >= timeout_ms) {
-					timer_iniciado = 0;
-					Restaurar_Timer();
-
-					switch (medida_actual) {
-					case MEDIDA_330: medida_actual = MEDIDA_10K; break;
-					case MEDIDA_10K: medida_actual = MEDIDA_1M; break;
-					case MEDIDA_1M:  medida_actual = MEDIDA_OFF; break;
-					default: break;
-					}
-					DUT_Configurar(medida_actual);
-					if (medida_actual == MEDIDA_OFF) {
-						Descarga(1);            // forzás descarga
-						estado_cap = CAP_ESPERANDO;
-					} else {
-						estado_cap = CAP_DESCARGANDO;
-					}
-					break;
-				}
+			/* Verificar con muestra fresca si el capacitor llegó al 63% de VCC */
+			if (flag_ADC == 1) {
+				flag_ADC = 0;
 
 				if (medida_adc >= 2580) {
 					uint32_t ticks = ticks_CAP;
 					timer_iniciado = 0;
 					Restaurar_Timer();
 
-					float ticks_xsegundo;
-					switch (medida_actual) {
-					case MEDIDA_1M:  ticks_xsegundo = 10e-6f; break;
-					case MEDIDA_10K: ticks_xsegundo = 10e-6f; break;
-					case MEDIDA_330: ticks_xsegundo = 1e-6f;  break;
-					default:         ticks_xsegundo = 1e-6f;  break;
-					}
+					/* Todos los rangos tienen el mismo periodo de tick: 10 µs
+					 * (72 MHz / (71+1) / (9+1) = 10 µs/tick)              */
+					const float ticks_xsegundo = 10e-6f;
 
 					float R_ohms;
 					switch (medida_actual) {
@@ -320,9 +334,10 @@ uint32_t DUT_Medir(void) {
 					default:         R_ohms = 1.0f;       break;
 					}
 
-					float cte_tiempo = ticks * ticks_xsegundo;
+					float cte_tiempo     = ticks * ticks_xsegundo;
 					float capacitancia_pF = (cte_tiempo / R_ohms) * 1e12f;
 
+					/* Verificar si conviene cambiar de rango */
 					tipo_medida_t nueva = medida_actual;
 					switch (medida_actual) {
 					case MEDIDA_1M:
@@ -345,18 +360,19 @@ uint32_t DUT_Medir(void) {
 
 					if (nueva != medida_actual) {
 						medida_actual = nueva;
-						//DUT_Configurar(medida_actual);
+						tick_descarga  = HAL_GetTick();
 						estado_cap = CAP_DESCARGANDO;
 					} else {
 						imprimir_capacitancia(capacitancia_pF);
 						estado_cap = CAP_ESPERANDO;
 					}
 				}
-				break;
 			}
-		}
+			break;
+		} /* CAP_MIDIENDO */
+		} /* switch estado_cap */
 		break;
-	}
+	} /* DUT_PARAMETRO_CAPACITANCIA */
 
 	default:
 		break;
@@ -442,7 +458,6 @@ static void imprimir_capacitancia(float pF) {
 
 	switch (medida_actual) {
 	case MEDIDA_1M: {
-		//if (pF < 100.0f || pF > 10000.0f) return;
 		entero  = (int32_t)pF;
 		decimal = (int32_t)((pF - (float)entero) * 10);
 		len = sprintf(buffer, "Cap 1M: %ld.%01ld pF\r\n", entero, decimal);
@@ -450,7 +465,6 @@ static void imprimir_capacitancia(float pF) {
 	}
 	case MEDIDA_10K: {
 		float nF = pF / 1000.0f;
-		//if (nF < 10.0f || nF > 1000.0f) return;
 		entero  = (int32_t)nF;
 		decimal = (int32_t)((nF - (float)entero) * 100);
 		len = sprintf(buffer, "Cap 10K: %ld.%02ld nF\r\n", entero, decimal);
@@ -458,7 +472,6 @@ static void imprimir_capacitancia(float pF) {
 	}
 	case MEDIDA_330: {
 		float uF = pF / 1000000.0f;
-		//if (uF < 1.0f || uF > 100.0f) return;
 		entero  = (int32_t)uF;
 		decimal = (int32_t)((uF - (float)entero) * 100);
 		len = sprintf(buffer, "Cap 330: %ld.%02ld uF\r\n", entero, decimal);
@@ -475,12 +488,12 @@ static void imprimir_capacitancia(float pF) {
 
 void Descarga(uint8_t activar) {
 	if (activar) {
-		// Limpia los 4 bits del pin PB5 y fuerza Output Push-Pull (0x2)
+
 		GPIOB->CRL = (GPIOB->CRL & ~(0xF << 20)) | (0x2 << 20);
-		// Tira el pin a masa (GND)
+
 		GPIOB->BRR = (1 << 5);
 	} else {
-		// Limpia los 4 bits del pin PB5 y fuerza Input Floating (0x4)
+
 		GPIOB->CRL = (GPIOB->CRL & ~(0xF << 20)) | (0x4 << 20);
 	}
 }
