@@ -20,10 +20,11 @@ typedef enum {
 	DUT_MODO_PERIODICO
 } DUT_modo_t;
 
-extern DUT_parametro_t DUT_estado_parametro;
+extern DUT_parametro_t DUT_estado_parametro; // Se declaran como extern para poder cambiarla desde la IU
 extern DUT_modo_t      DUT_estado_modo;
-extern uint8_t flag_ADC;
 extern uint8_t flag_med_unica;
+
+extern uint8_t flag_ADC;	// Para avisar que se ejecutó la ISR del ADC con timer
 
 void DUT_Iniciar(void);
 void DUT_Detener(void);

@@ -10,32 +10,75 @@
 #include "DUT.h"
 #include "main.h"
 
-#define ADC_SAT_HIGH      3890u   /* 95% de 4095 */
-#define ADC_SAT_LOW        82u   /* 2%  de 4095 */
-#define ADC_63_PERCENT    2580u   /* 63% de 4095 */
 
-/* Umbrales de autorango para resistencia (en MOhms) */
-#define UMBRAL_1M_BAJA    0.5f
-#define UMBRAL_10K_BAJA   0.005f
-#define UMBRAL_330_BAJA   0.000033f
-#define UMBRAL_10K_SUBE   1.5f
-#define UMBRAL_330_SUBE   0.015f
-
-/* Timeout máximo esperando que el capacitor descargue (ms).
- * Con 330R y capacitores grandes puede necesitar varios segundos;
- * se elige un valor conservador. Ajustar según el rango esperado. */
-#define TIMEOUT_DESCARGA_MS  5000u
-
-/*-------------------------------------------------------------
-
-	NOMENCLATURA DE PREFIJOS:
+/* =========================================================================================
+ * 									NOMENCLATURA DE PREFIJOS:
+ * =========================================================================================
 
 	IU: función/variable declarada en el header de IU.h, librería de la interfaz de usuario.
 	DUT: función/variable declarada en el header DUT.h, librería del DUT.
 	ANTR: función/variable declarada en el header ANTR.h, librería antirrebote.
 	Sin prefijo: función/variable local de este .c
 
--------------------------------------------------------------*/
+-------------------------------------------------------------------------------------------*/
+
+
+/* =========================================================================================
+ * 										Funciones
+ * =========================================================================================
+
+ *  DUT_Iniciar(): configura los pines, el ADC y el timer para comenzar a medir: inicia el
+ *  rango inicial en 330 Ohms.
+ *
+ *  DUT_Detener(): pone todos los pines en alta impedancia, detiene el timer y el ADC.
+ *
+ *  DUT_Medir(): dependiendo del parámetro y modo configurados, gestiona la lógica para las
+ *  muestras del ADC. Tanto resistencia o la secuencia descarga/carga para la capacitancia.
+ *  Imprime el resultado.
+ *
+ *  DUT_Configurar(): habilita el pin GPIO correspondiente al rango recibido como parámetro,
+ *  poniendo los otros dos en alta impedancia con Set_Pin().
+ *
+ *  Set_Pin(): configura los GPIO para el alternado de pines en alto o baja impedancia.
+ *
+ *  Descarga(): controla el pin PB5 de descarga. Al activar, lo configura como salida a GND
+ *  para descargar el capacitor; al desactivar, lo deja como alta impedancia.
+ *
+ *  Configurar_Timer(): configura TIM3 con prescaler 71 y period 9 para obtener ticks de 10 us,
+ *  usados como base de tiempo en la medida de capacitancia.
+ *
+ *  Restaurar_Timer(): devuelve TIM3 a su configuración normal con el trigger periódico del
+ *  ADC a 1 ms parala medición de resistencia.
+ *
+ *  Medida_unica(): acumula 32 muestras ADC, calcula el  promedio y devuelve la resistencia
+ *  enMOhms aplicando la fórmula del divisor resistivo. Devuelve -1 mientras no se completaron
+ *  las 32 muestras.
+ *
+ *  Ajustar_Rango(): revisa el resultado de la última medición de resistencia y, si está fuera
+ *  de los del rango actual, cambia al rango correspondiente.
+ *
+ *  imprimir_resistencia(): formatea e imprime el valor de resistencia por UART con la unidad
+ *  más conveniente. Avisa si la medida es fuera de escala.
+ *
+ *  imprimir_capacitancia(): formatea e imprime el valor de capacitancia por UART con la unidad
+ *  más conveniente
+
+ * ======================================================================================== */
+
+
+#define ADC_SAT_HIGH      3890u   // 95% de 4095
+#define ADC_SAT_LOW        82u   // 2%  de 4095
+#define ADC_63_PERCENT    2580u   // 63% de 4095
+
+
+#define UMBRAL_1M_BAJA    0.5f
+#define UMBRAL_10K_BAJA   0.005f
+#define UMBRAL_330_BAJA   0.000033f
+#define UMBRAL_10K_SUBE   1.5f
+#define UMBRAL_330_SUBE   0.015f
+
+#define TIMEOUT_DESCARGA_MS  5000u
+
 
 DUT_parametro_t DUT_estado_parametro = DUT_PARAMETRO_RESISTENCIA;
 DUT_modo_t      DUT_estado_modo      = DUT_MODO_UNICO;
@@ -249,127 +292,127 @@ void DUT_Medir(void) {
 			}
 			break;
 
-		case CAP_DESCARGANDO:
-			DUT_Configurar(MEDIDA_OFF); /* Aísla la fuente de tensión    */
-			Descarga(1);                /* Drena el componente a masa     */
+			case CAP_DESCARGANDO:
+				DUT_Configurar(MEDIDA_OFF); /* Aísla la fuente de tensión    */
+				Descarga(1);                /* Drena el componente a masa     */
 
-			if (medida_adc <= ADC_SAT_LOW) {
-				/* Descarga completa: continuar con la medición */
-				Descarga(0);
-				DUT_Configurar(medida_actual);
-				estado_cap = CAP_MIDIENDO;
-			} else if (HAL_GetTick() - tick_descarga >= TIMEOUT_DESCARGA_MS) {
-				/* Timeout: el capacitor no descargó en el tiempo esperado.
-				 * Se vuelve al estado inicial para no quedar bloqueado. */
-				Descarga(0);
-				medida_actual = MEDIDA_330;
-				DUT_Configurar(medida_actual);
-				estado_cap = CAP_ESPERANDO;
-			}
-			break;
-
-		case CAP_MIDIENDO: {
-			static uint8_t  timer_iniciado = 0;
-			static uint32_t tick_timeout   = 0;
-
-			if (!timer_iniciado) {
-				ticks_CAP    = 0;
-				tick_timeout = HAL_GetTick();
-				Configurar_Timer();
-				timer_iniciado = 1;
-			}
-
-			uint32_t timeout_ms;
-			switch (medida_actual) {
-			case MEDIDA_1M:  timeout_ms = 15000; break;
-			case MEDIDA_10K: timeout_ms =  5000; break;
-			case MEDIDA_330: timeout_ms =  5000; break;
-			default:         timeout_ms =  5000; break;
-			}
-
-			if (HAL_GetTick() - tick_timeout >= timeout_ms) {
-				/* El capacitor no alcanzó el umbral: cambiar a rango superior */
-				timer_iniciado = 0;
-				Restaurar_Timer();
-
-				switch (medida_actual) {
-				case MEDIDA_330: medida_actual = MEDIDA_10K; break;
-				case MEDIDA_10K: medida_actual = MEDIDA_1M;  break;
-				case MEDIDA_1M:
-					/* Se agotaron todos los rangos */
-					HAL_UART_Transmit(&huart1, (uint8_t*)"FUERA DE ESCALA\r\n", 17, 100);
-					medida_actual = MEDIDA_330;
-					Descarga(1);
-					estado_cap = CAP_ESPERANDO;
-					break;
-				default: break;
-				}
-
-				if (estado_cap != CAP_ESPERANDO) {
+				if (medida_adc <= ADC_SAT_LOW) {
+					/* Descarga completa: continuar con la medición */
+					Descarga(0);
 					DUT_Configurar(medida_actual);
-					tick_descarga = HAL_GetTick();
-					estado_cap = CAP_DESCARGANDO;
+					estado_cap = CAP_MIDIENDO;
+				} else if (HAL_GetTick() - tick_descarga >= TIMEOUT_DESCARGA_MS) {
+					/* Timeout: el capacitor no descargó en el tiempo esperado.
+					 * Se vuelve al estado inicial para no quedar bloqueado. */
+					Descarga(0);
+					medida_actual = MEDIDA_330;
+					DUT_Configurar(medida_actual);
+					estado_cap = CAP_ESPERANDO;
 				}
 				break;
-			}
 
-			/* Verificar con muestra fresca si el capacitor llegó al 63% de VCC */
-			if (flag_ADC == 1) {
-				flag_ADC = 0;
+			case CAP_MIDIENDO: {
+				static uint8_t  timer_iniciado = 0;
+				static uint32_t tick_timeout   = 0;
 
-				if (medida_adc >= ADC_63_PERCENT) {
-					uint32_t ticks = ticks_CAP;
+				if (!timer_iniciado) {
+					ticks_CAP    = 0;
+					tick_timeout = HAL_GetTick();
+					Configurar_Timer();
+					timer_iniciado = 1;
+				}
+
+				uint32_t timeout_ms;
+				switch (medida_actual) {
+				case MEDIDA_1M:  timeout_ms = 15000; break;
+				case MEDIDA_10K: timeout_ms =  5000; break;
+				case MEDIDA_330: timeout_ms =  5000; break;
+				default:         timeout_ms =  5000; break;
+				}
+
+				if (HAL_GetTick() - tick_timeout >= timeout_ms) {
+					/* El capacitor no alcanzó el umbral: cambiar a rango superior */
 					timer_iniciado = 0;
 					Restaurar_Timer();
 
-					/* Todos los rangos tienen el mismo periodo de tick: 10 µs
-					 * (72 MHz / (71+1) / (9+1) = 10 µs/tick)              */
-					const float ticks_xsegundo = 10e-6f;
-
-					float R_ohms;
 					switch (medida_actual) {
-					case MEDIDA_1M:  R_ohms = 1000000.0f; break;
-					case MEDIDA_10K: R_ohms = 10000.0f;   break;
-					case MEDIDA_330: R_ohms = 330.0f;     break;
-					default:         R_ohms = 1.0f;       break;
-					}
-
-					float cte_tiempo      = ticks * ticks_xsegundo;
-					float capacitancia_pF = (cte_tiempo / R_ohms) * 1e12f;
-
-					/* Verificar si conviene cambiar de rango */
-					tipo_medida_t nueva = medida_actual;
-					switch (medida_actual) {
+					case MEDIDA_330: medida_actual = MEDIDA_10K; break;
+					case MEDIDA_10K: medida_actual = MEDIDA_1M;  break;
 					case MEDIDA_1M:
-						if (capacitancia_pF > 10000.0f)
-							nueva = MEDIDA_10K;
+						/* Se agotaron todos los rangos */
+						HAL_UART_Transmit(&huart1, (uint8_t*)"FUERA DE ESCALA\r\n", 17, 100);
+						medida_actual = MEDIDA_330;
+						Descarga(1);
+						estado_cap = CAP_ESPERANDO;
 						break;
-					case MEDIDA_10K:
-						if (capacitancia_pF > 1000000.0f)
-							nueva = MEDIDA_330;
-						else if (capacitancia_pF < 100.0f)
-							nueva = MEDIDA_1M;
-						break;
-					case MEDIDA_330:
-						if (capacitancia_pF < 1000000.0f)
-							nueva = MEDIDA_10K;
-						break;
-					default:
-						break;
+					default: break;
 					}
 
-					if (nueva != medida_actual) {
-						medida_actual = nueva;
+					if (estado_cap != CAP_ESPERANDO) {
+						DUT_Configurar(medida_actual);
 						tick_descarga = HAL_GetTick();
 						estado_cap = CAP_DESCARGANDO;
-					} else {
-						imprimir_capacitancia(capacitancia_pF);
-						estado_cap = CAP_ESPERANDO;
+					}
+					break;
+				}
+
+				/* Verificar con muestra fresca si el capacitor llegó al 63% de VCC */
+				if (flag_ADC == 1) {
+					flag_ADC = 0;
+
+					if (medida_adc >= ADC_63_PERCENT) {
+						uint32_t ticks = ticks_CAP;
+						timer_iniciado = 0;
+						Restaurar_Timer();
+
+						/* Todos los rangos tienen el mismo periodo de tick: 10 µs
+						 * (72 MHz / (71+1) / (9+1) = 10 µs/tick)              */
+						const float ticks_xsegundo = 10e-6f;
+
+						float R_ohms;
+						switch (medida_actual) {
+						case MEDIDA_1M:  R_ohms = 1000000.0f; break;
+						case MEDIDA_10K: R_ohms = 10000.0f;   break;
+						case MEDIDA_330: R_ohms = 330.0f;     break;
+						default:         R_ohms = 1.0f;       break;
+						}
+
+						float cte_tiempo      = ticks * ticks_xsegundo;
+						float capacitancia_pF = (cte_tiempo / R_ohms) * 1e12f;
+
+						/* Verificar si conviene cambiar de rango */
+						tipo_medida_t nueva = medida_actual;
+						switch (medida_actual) {
+						case MEDIDA_1M:
+							if (capacitancia_pF > 10000.0f)
+								nueva = MEDIDA_10K;
+							break;
+						case MEDIDA_10K:
+							if (capacitancia_pF > 1000000.0f)
+								nueva = MEDIDA_330;
+							else if (capacitancia_pF < 100.0f)
+								nueva = MEDIDA_1M;
+							break;
+						case MEDIDA_330:
+							if (capacitancia_pF < 1000000.0f)
+								nueva = MEDIDA_10K;
+							break;
+						default:
+							break;
+						}
+
+						if (nueva != medida_actual) {
+							medida_actual = nueva;
+							tick_descarga = HAL_GetTick();
+							estado_cap = CAP_DESCARGANDO;
+						} else {
+							imprimir_capacitancia(capacitancia_pF);
+							estado_cap = CAP_ESPERANDO;
+						}
 					}
 				}
-			}
-			break;
-		} /* CAP_MIDIENDO */
+				break;
+			} /* CAP_MIDIENDO */
 		} /* switch estado_cap */
 		break;
 	} /* DUT_PARAMETRO_CAPACITANCIA */

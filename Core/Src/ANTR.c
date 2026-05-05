@@ -2,18 +2,32 @@
 #include "main.h"
 
 
-
-
-/*-------------------------------------------------------------
-
-	NOMENCLATURA DE PREFIJOS:
+/* =========================================================================================
+ * 									NOMENCLATURA DE PREFIJOS:
+ * =========================================================================================
 
 	IU: función/variable declarada en el header de IU.h, librería de la interfaz de usuario.
 	DUT: función/variable declarada en el header DUT.h, librería del DUT.
 	ANTR: función/variable declarada en el header ANTR.h, librería antirrebote.
 	Sin prefijo: función/variable local de este .c
 
--------------------------------------------------------------*/
+-------------------------------------------------------------------------------------------*/
+
+
+/* =========================================================================================
+ * 										Funciones
+ * =========================================================================================
+ *
+ *  ANTR_iniciar(): inicializa la estructura del pulsador, para poder utilizarla con
+ *  diferentes pulsadores simultáneamente
+ *
+ *  ANTR_Flanco(): se llema desde la ISR del pulsador. Registra el tick del flanco, pasa
+ *  al estado de antirrebote e ignora flancos posteriores hasta que se resuelva
+ *
+ *  ANTR_Procesar(): contiene la FSM antirrebote con los estados: ANTR_PRESIONADO,
+ *  ANTR_LIBERADO o ANTR_NINGUNO.
+ *
+ * ======================================================================================== */
 
 
 #define TIEMPO_REBOTE 20
@@ -34,6 +48,7 @@ void ANTR_Flanco(ANTR_Pulsador *p) {
     }
 
 }
+
 
 
 ANTR_Boton ANTR_Procesar(ANTR_Pulsador *p) {

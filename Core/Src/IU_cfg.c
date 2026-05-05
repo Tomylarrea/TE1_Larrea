@@ -9,16 +9,36 @@
 #include "DUT.h"
 #include "main.h"
 
-/*-------------------------------------------------------------
+/* =========================================================================================
+ * 									NOMENCLATURA DE PREFIJOS:
+ * =========================================================================================
+ *
+ *	IU: función/variable declarada en el header de IU.h, librería de la interfaz de usuario.
+ *	DUT: función/variable declarada en el header DUT.h, librería del DUT.
+ *	ANTR: función/variable declarada en el header ANTR.h, librería antirrebote.
+ *	Sin prefijo: función/variable local de este .c
+ *
+ *-------------------------------------------------------------------------------------------*/
 
-	NOMENCLATURA DE PREFIJOS:
 
-	IU: función/variable declarada en el header de IU.h, librería de la interfaz de usuario.
-	DUT: función/variable declarada en el header DUT.h, librería del DUT.
-	ANTR: función/variable declarada en el header ANTR.h, librería antirrebote.
-	Sin prefijo: función/variable local de este .c
-
--------------------------------------------------------------*/
+/* =========================================================================================
+ * 										Funciones
+ * =========================================================================================
+ *
+ *  IU_iniciar(): habilita la interrupción de la UART y el flag para que en el próximo llamado
+ *  a IU_menu() se imprima el menú principal.
+ *
+ *  IU_Detener(): deshabilita la interrupción de la UART, limpia el flag de byte recibido y,
+ *  si el modo activo es único, dispara flag_med_unica para que arranque la primera medición
+ *  al volver al modo de medida.
+ *
+ *  IU_menu(): en cada llamado verifica si llegó un byte por UART y, según el estado actual
+ *  procesa la opción correspondiente, actualiza la configuración del DUT e imprime la
+ *  respuesta.
+ *
+ *  imprimir_menu():imprime por UART el menú o submenú correspondiente al estado recibido
+ *
+ * ======================================================================================== */
 
 static uint8_t color = 1;
 static volatile uint8_t flag_UART = 0;
@@ -37,16 +57,19 @@ typedef enum {
 
 static menu_t estado_menu = MENU_PRINCIPAL;
 static uint8_t flag_1er_llamado = 1;  /* Se inicializa como activo para que se grafique el MP ni bien arranque el sistema.
- * Luego solo se reactiva desde IU_iniciar(), de esa manera siempre aparece en el primer
-								  llamado */
+ * Luego solo se reactiva desde IU_iniciar(), de esa manera siempre aparece en el primer llamado */
 
 static void imprimir_menu(menu_t menu);
+
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	flag_UART = 1;
 	HAL_UART_Receive_IT(&huart1, (uint8_t*)&rx_byte, 1);
 }
+
+
+
 
 
 void IU_menu(void) {
@@ -123,15 +146,20 @@ void IU_iniciar(void){
 	flag_1er_llamado = 1;
 }
 
+
+
+
 void IU_Detener(void){
 	flag_UART = 0;
 	HAL_UART_AbortReceive_IT(&huart1);
 
-	/* Al salir del menú, si el modo es único disparar la primera medición automáticamente */
 	if (DUT_estado_modo == DUT_MODO_UNICO) {
 		flag_med_unica = 1;
 	}
 }
+
+
+
 
 static void imprimir_menu(menu_t menu) {
 	switch (menu) {
