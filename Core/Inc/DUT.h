@@ -8,6 +8,8 @@
 #ifndef INC_DUT_H_
 #define INC_DUT_H_
 
+#include <stdint.h>
+
 typedef enum {
 	DUT_PARAMETRO_RESISTENCIA,
 	DUT_PARAMETRO_CAPACITANCIA
@@ -19,13 +21,12 @@ typedef enum {
 } DUT_modo_t;
 
 extern DUT_parametro_t DUT_estado_parametro;
-extern DUT_modo_t DUT_estado_modo;
+extern DUT_modo_t      DUT_estado_modo;
 extern uint8_t flag_ADC;
 extern uint8_t flag_med_unica;
 
-
-void DUT_Iniciar();
-void DUT_Detener();
-uint32_t DUT_Medir();
+void DUT_Iniciar(void);
+void DUT_Detener(void);
+void DUT_Medir(void);
 
 #endif /* INC_DUT_H_ */

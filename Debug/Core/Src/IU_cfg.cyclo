@@ -1,5 +1,5 @@
-../Core/Src/IU_cfg.c:46:6:HAL_UART_RxCpltCallback	1
-../Core/Src/IU_cfg.c:54:6:IU_menu	22
-../Core/Src/IU_cfg.c:124:6:IU_iniciar	1
-../Core/Src/IU_cfg.c:131:6:IU_Detener	2
-../Core/Src/IU_cfg.c:141:6:imprimir_menu	33
+../Core/Src/IU_cfg.c:45:6:HAL_UART_RxCpltCallback	1
+../Core/Src/IU_cfg.c:52:6:IU_menu	22
+../Core/Src/IU_cfg.c:121:6:IU_iniciar	1
+../Core/Src/IU_cfg.c:126:6:IU_Detener	2
+../Core/Src/IU_cfg.c:136:13:imprimir_menu	33

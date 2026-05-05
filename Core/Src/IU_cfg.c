@@ -20,7 +20,6 @@
 
 -------------------------------------------------------------*/
 
-
 static uint8_t color = 1;
 static volatile uint8_t flag_UART = 0;
 const char* const str_parametro[] = {"resistencia", "capacitancia"};
@@ -41,13 +40,12 @@ static uint8_t flag_1er_llamado = 1;  /* Se inicializa como activo para que se g
  * Luego solo se reactiva desde IU_iniciar(), de esa manera siempre aparece en el primer
 								  llamado */
 
-void imprimir_menu(menu_t menu);
+static void imprimir_menu(menu_t menu);
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	flag_UART = 1;
 	HAL_UART_Receive_IT(&huart1, (uint8_t*)&rx_byte, 1);
-
 }
 
 
@@ -117,7 +115,6 @@ void IU_menu(void) {
 			}
 			break;
 		}
-
 	}
 }
 
@@ -126,19 +123,17 @@ void IU_iniciar(void){
 	flag_1er_llamado = 1;
 }
 
-// IU_cfg.c
-
 void IU_Detener(void){
-    flag_UART = 0;
-    HAL_UART_AbortReceive_IT(&huart1);
+	flag_UART = 0;
+	HAL_UART_AbortReceive_IT(&huart1);
 
-    // Al salir del menú, si el modo es único disparar la primera medición
-    if (DUT_estado_modo == DUT_MODO_UNICO) {
-        flag_med_unica = 1;
-    }
+	/* Al salir del menú, si el modo es único disparar la primera medición automáticamente */
+	if (DUT_estado_modo == DUT_MODO_UNICO) {
+		flag_med_unica = 1;
+	}
 }
 
-void imprimir_menu(menu_t menu) {
+static void imprimir_menu(menu_t menu) {
 	switch (menu) {
 	case MENU_PRINCIPAL:
 

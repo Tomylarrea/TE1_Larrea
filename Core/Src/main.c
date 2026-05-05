@@ -99,24 +99,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	}
 }
 
-void Set_Pin_State(uint16_t Pin, uint8_t to_high) {
-	GPIO_InitTypeDef GPIO_InitStruct = {0};
-	GPIO_InitStruct.Pin = Pin;
-
-	if (to_high) {
-		// Configuramos como salida para poder ponerlo en 3.3V
-		GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-		GPIO_InitStruct.Pull = GPIO_NOPULL;
-		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-		HAL_GPIO_WritePin(GPIOA, Pin, GPIO_PIN_SET);
-	} else {
-		// Configuramos como entrada (Alta Impedancia)
-		GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-		GPIO_InitStruct.Pull = GPIO_NOPULL;
-		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-	}
-}
 /* USER CODE END 0 */
 
 /**
@@ -154,7 +136,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 	//IU_iniciar();
 	ANTR_Boton evento = ANTR_Procesar(&pulsador);
-	uint32_t valor_adc;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -208,20 +190,15 @@ int main(void)
 		        flag_medida_iniciar = 0;
 		        DUT_Iniciar();
 		    }
-		    if (flag_ADC == 1){
-		    	valor_adc = DUT_Medir();
-		    	if (valor_adc != 0){
-		    	//uint16_t len = sprintf(buffer, "%lu MOhms\r\n", valor_adc);
-		    	//HAL_UART_Transmit(&huart1, (uint8_t*)buffer, len, 100);
-		    	}
-		    }
+
+		    DUT_Medir();
+
 		} else {
 		    if (flag_medida_detener == 1) {
 		        flag_medida_detener = 0;
 		        DUT_Detener();
 		    }
 		}
-
 
 	}
   /* USER CODE END 3 */

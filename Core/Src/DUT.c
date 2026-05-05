@@ -10,13 +10,16 @@
 #include "DUT.h"
 #include "main.h"
 
+#define ADC_SAT_HIGH      3890u   /* 95% de 4095 */
+#define ADC_SAT_LOW        82u   /* 2%  de 4095 */
+#define ADC_63_PERCENT    2580u   /* 63% de 4095 */
+
+/* Umbrales de autorango para resistencia (en MOhms) */
 #define UMBRAL_1M_BAJA    0.5f
 #define UMBRAL_10K_BAJA   0.005f
 #define UMBRAL_330_BAJA   0.000033f
 #define UMBRAL_10K_SUBE   1.5f
 #define UMBRAL_330_SUBE   0.015f
-#define ADC_SAT_HIGH      4000u
-#define ADC_SAT_LOW       200u
 
 /* Timeout máximo esperando que el capacitor descargue (ms).
  * Con 330R y capacitores grandes puede necesitar varios segundos;
@@ -38,8 +41,6 @@ DUT_parametro_t DUT_estado_parametro = DUT_PARAMETRO_RESISTENCIA;
 DUT_modo_t      DUT_estado_modo      = DUT_MODO_UNICO;
 uint8_t flag_ADC = 0;
 uint8_t flag_med_unica = 0;
-uint32_t resultado;
-float flag_res;
 volatile uint32_t medida_adc;
 static uint32_t tick_periodico = 0;
 static volatile uint32_t ticks_CAP = 0;
@@ -51,17 +52,17 @@ typedef enum {
 	MEDIDA_OFF
 } tipo_medida_t;
 
-tipo_medida_t medida_actual = MEDIDA_330;
+static tipo_medida_t medida_actual = MEDIDA_330;
 
-void DUT_Configurar(tipo_medida_t medida);
+static void DUT_Configurar(tipo_medida_t medida);
 static void imprimir_resistencia(float res_Mohms);
 static void Ajustar_Rango(float res_Mohms);
 static void imprimir_capacitancia(float pF);
-void Descarga(uint8_t activar);
+static void Descarga(uint8_t activar);
 static void Configurar_Timer(void);
 static void Restaurar_Timer(void);
 
-void Set_Pin(uint16_t Pin, uint8_t alto) {
+static void Set_Pin(uint16_t Pin, uint8_t alto) {
 	GPIO_InitTypeDef GPIO_InitStruct = {0};
 	GPIO_InitStruct.Pin = Pin;
 	if (alto) {
@@ -103,7 +104,7 @@ void DUT_Detener() {
 	HAL_ADC_Stop_IT(&hadc1);
 }
 
-void DUT_Configurar(tipo_medida_t medida) {
+static void DUT_Configurar(tipo_medida_t medida) {
 	switch (medida) {
 	case MEDIDA_1M:
 		Set_Pin(GPIO1M_Pin, 1);
@@ -179,7 +180,7 @@ static float Medida_unica(void) {
 	return -1.0f;
 }
 
-uint32_t DUT_Medir(void) {
+void DUT_Medir(void) {
 	static uint8_t flag_adq = 0;
 	float res_parcial;
 
@@ -189,10 +190,11 @@ uint32_t DUT_Medir(void) {
 			if (flag_med_unica == 1) {
 				flag_med_unica = 0;
 				flag_adq = 1;
+				HAL_UART_Transmit(&huart1, (uint8_t*)"Midiendo...\r\n", 13, 100);
 			}
 			break;
 		case DUT_MODO_PERIODICO:
-			if (HAL_GetTick() - tick_periodico >= 1000) {
+			if (HAL_GetTick() - tick_periodico >= 100) {
 				tick_periodico = HAL_GetTick();
 				flag_adq = 1;
 			}
@@ -208,10 +210,8 @@ uint32_t DUT_Medir(void) {
 			res_parcial = Medida_unica();
 			if (res_parcial != -1.0f) {
 				flag_adq = 0;
-				resultado = (uint32_t)res_parcial;
 				imprimir_resistencia(res_parcial);
 				Ajustar_Rango(res_parcial);
-				return resultado;
 			}
 		}
 		break;
@@ -231,15 +231,14 @@ uint32_t DUT_Medir(void) {
 			switch (DUT_estado_modo) {
 			case DUT_MODO_UNICO:
 				if (flag_med_unica == 1) {
-					HAL_UART_Transmit(&huart1, (uint8_t*)"Midiendo...\r\n", 13, 100);
 					flag_med_unica = 0;
+					HAL_UART_Transmit(&huart1, (uint8_t*)"Midiendo...\r\n", 13, 100);
 					tick_descarga = HAL_GetTick();
 					estado_cap = CAP_DESCARGANDO;
 				}
-
 				break;
 			case DUT_MODO_PERIODICO:
-				if (HAL_GetTick() - tick_periodico >= 1000) {
+				if (HAL_GetTick() - tick_periodico >= 100) {
 					tick_periodico = HAL_GetTick();
 					tick_descarga  = HAL_GetTick();
 					estado_cap = CAP_DESCARGANDO;
@@ -296,17 +295,18 @@ uint32_t DUT_Medir(void) {
 				switch (medida_actual) {
 				case MEDIDA_330: medida_actual = MEDIDA_10K; break;
 				case MEDIDA_10K: medida_actual = MEDIDA_1M;  break;
-				case MEDIDA_1M:  medida_actual = MEDIDA_OFF; break;
+				case MEDIDA_1M:
+					/* Se agotaron todos los rangos */
+					HAL_UART_Transmit(&huart1, (uint8_t*)"FUERA DE ESCALA\r\n", 17, 100);
+					medida_actual = MEDIDA_330;
+					Descarga(1);
+					estado_cap = CAP_ESPERANDO;
+					break;
 				default: break;
 				}
 
-				DUT_Configurar(medida_actual);
-
-				if (medida_actual == MEDIDA_OFF) {
-					Descarga(1);
-					medida_actual = MEDIDA_330; /* resetear para la próxima medición */
-					estado_cap = CAP_ESPERANDO;
-				} else {
+				if (estado_cap != CAP_ESPERANDO) {
+					DUT_Configurar(medida_actual);
 					tick_descarga = HAL_GetTick();
 					estado_cap = CAP_DESCARGANDO;
 				}
@@ -317,7 +317,7 @@ uint32_t DUT_Medir(void) {
 			if (flag_ADC == 1) {
 				flag_ADC = 0;
 
-				if (medida_adc >= 2580) {
+				if (medida_adc >= ADC_63_PERCENT) {
 					uint32_t ticks = ticks_CAP;
 					timer_iniciado = 0;
 					Restaurar_Timer();
@@ -334,7 +334,7 @@ uint32_t DUT_Medir(void) {
 					default:         R_ohms = 1.0f;       break;
 					}
 
-					float cte_tiempo     = ticks * ticks_xsegundo;
+					float cte_tiempo      = ticks * ticks_xsegundo;
 					float capacitancia_pF = (cte_tiempo / R_ohms) * 1e12f;
 
 					/* Verificar si conviene cambiar de rango */
@@ -360,7 +360,7 @@ uint32_t DUT_Medir(void) {
 
 					if (nueva != medida_actual) {
 						medida_actual = nueva;
-						tick_descarga  = HAL_GetTick();
+						tick_descarga = HAL_GetTick();
 						estado_cap = CAP_DESCARGANDO;
 					} else {
 						imprimir_capacitancia(capacitancia_pF);
@@ -377,8 +377,6 @@ uint32_t DUT_Medir(void) {
 	default:
 		break;
 	}
-
-	return 0;
 }
 
 static void Ajustar_Rango(float res_Mohms) {
@@ -388,6 +386,10 @@ static void Ajustar_Rango(float res_Mohms) {
 	case MEDIDA_1M:
 		if (res_Mohms < UMBRAL_1M_BAJA)
 			nueva = MEDIDA_10K;
+		else if (medida_adc >= ADC_SAT_HIGH) {
+			HAL_UART_Transmit(&huart1, (uint8_t*)"FUERA DE ESCALA\r\n", 17, 100);
+			return;
+		}
 		break;
 	case MEDIDA_10K:
 		if (res_Mohms < UMBRAL_10K_BAJA)
@@ -419,19 +421,32 @@ static void imprimir_resistencia(float res_Mohms) {
 	uint16_t len;
 	int32_t entero, decimal;
 
+	if (medida_actual == MEDIDA_1M && medida_adc >= ADC_SAT_HIGH) {
+		HAL_UART_Transmit(&huart1, (uint8_t*)"FUERA DE ESCALA\r\n", 17, 100);
+		return;
+	}
+
 	switch (medida_actual) {
 	case MEDIDA_1M: {
-		entero  = (int32_t)res_Mohms;
-		decimal = (int32_t)((res_Mohms - (float)entero) * 10000);
-		len = sprintf(buffer, "Rango 1M: %ld.%04ld MOhms\r\n", entero, decimal);
+		/* Convertir a kOhms para valores >= 1000 kOhms, si no en MOhms */
+		if (res_Mohms >= 1.0f) {
+			entero  = (int32_t)res_Mohms;
+			decimal = (int32_t)((res_Mohms - (float)entero) * 100);
+			len = sprintf(buffer, "%ld.%02ld MOhm\r\n", entero, decimal);
+		} else {
+			float kohms = res_Mohms * 1000.0f;
+			entero  = (int32_t)kohms;
+			decimal = (int32_t)((kohms - (float)entero) * 10);
+			len = sprintf(buffer, "%ld.%01ld kOhm\r\n", entero, decimal);
+		}
 		break;
 	}
 	case MEDIDA_10K: {
 		float kohms = res_Mohms * 1000.0f;
 		if (kohms > 150.0f || kohms < 5.0f) return;
 		entero  = (int32_t)kohms;
-		decimal = (int32_t)((kohms - (float)entero) * 1000);
-		len = sprintf(buffer, "Rango 10K: %ld.%03ld kOhms\r\n", entero, decimal);
+		decimal = (int32_t)((kohms - (float)entero) * 10);
+		len = sprintf(buffer, "%ld.%01ld kOhm\r\n", entero, decimal);
 		break;
 	}
 	case MEDIDA_330: {
@@ -439,11 +454,11 @@ static void imprimir_resistencia(float res_Mohms) {
 		if (ohms > 3000.0f || ohms < 33.0f) return;
 		entero  = (int32_t)ohms;
 		decimal = (int32_t)((ohms - (float)entero) * 10);
-		len = sprintf(buffer, "Rango 330: %ld.%01ld Ohms\r\n", entero, decimal);
+		len = sprintf(buffer, "%ld.%01ld Ohm\r\n", entero, decimal);
 		break;
 	}
 	case MEDIDA_OFF:
-		len = sprintf(buffer, "Fuera de rango: muy bajo\r\n");
+		len = sprintf(buffer, "FUERA DE ESCALA\r\n");
 		break;
 	default: return;
 	}
@@ -456,44 +471,40 @@ static void imprimir_capacitancia(float pF) {
 	uint16_t len;
 	int32_t entero, decimal;
 
-	switch (medida_actual) {
-	case MEDIDA_1M: {
-		entero  = (int32_t)pF;
-		decimal = (int32_t)((pF - (float)entero) * 10);
-		len = sprintf(buffer, "Cap 1M: %ld.%01ld pF\r\n", entero, decimal);
-		break;
-	}
-	case MEDIDA_10K: {
-		float nF = pF / 1000.0f;
-		entero  = (int32_t)nF;
-		decimal = (int32_t)((nF - (float)entero) * 100);
-		len = sprintf(buffer, "Cap 10K: %ld.%02ld nF\r\n", entero, decimal);
-		break;
-	}
-	case MEDIDA_330: {
+	if (pF >= 1000000.0f) {
+		/* Mostrar en µF */
 		float uF = pF / 1000000.0f;
 		entero  = (int32_t)uF;
 		decimal = (int32_t)((uF - (float)entero) * 100);
-		len = sprintf(buffer, "Cap 330: %ld.%02ld uF\r\n", entero, decimal);
-		break;
-	}
-	case MEDIDA_OFF:
-		len = sprintf(buffer, "Fuera de rango: muy bajo\r\n");
-		break;
-	default: return;
+		len = sprintf(buffer, "%ld.%02ld uF\r\n", entero, decimal);
+	} else if (pF >= 1000.0f) {
+		/* Mostrar en nF */
+		float nF = pF / 1000.0f;
+		entero  = (int32_t)nF;
+		decimal = (int32_t)((nF - (float)entero) * 10);
+		len = sprintf(buffer, "%ld.%01ld nF\r\n", entero, decimal);
+	} else {
+		/* Mostrar en pF */
+		entero  = (int32_t)pF;
+		decimal = (int32_t)((pF - (float)entero) * 10);
+		len = sprintf(buffer, "%ld.%01ld pF\r\n", entero, decimal);
 	}
 
 	HAL_UART_Transmit(&huart1, (uint8_t*)buffer, len, 100);
 }
 
-void Descarga(uint8_t activar) {
+static void Descarga(uint8_t activar) {
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
+	GPIO_InitStruct.Pin = GPIO_Descarga_Pin;
 	if (activar) {
-
-		GPIOB->CRL = (GPIOB->CRL & ~(0xF << 20)) | (0x2 << 20);
-
-		GPIOB->BRR = (1 << 5);
+		GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+		GPIO_InitStruct.Pull = GPIO_NOPULL;
+		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+		HAL_GPIO_Init(GPIO_Descarga_GPIO_Port, &GPIO_InitStruct);
+		HAL_GPIO_WritePin(GPIO_Descarga_GPIO_Port, GPIO_Descarga_Pin, GPIO_PIN_RESET);
 	} else {
-
-		GPIOB->CRL = (GPIOB->CRL & ~(0xF << 20)) | (0x4 << 20);
+		GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+		GPIO_InitStruct.Pull = GPIO_NOPULL;
+		HAL_GPIO_Init(GPIO_Descarga_GPIO_Port, &GPIO_InitStruct);
 	}
 }
