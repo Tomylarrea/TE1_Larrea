@@ -338,12 +338,11 @@ void DUT_Medir(void) {
 					timer_iniciado = 1;
 				}
 
-				uint32_t timeout_ms;
 				switch (medida_actual) {
-				case MEDIDA_1M:  timeout_ms = 15000; break;
-				case MEDIDA_10K: timeout_ms =  5000; break;
-				case MEDIDA_330: timeout_ms =  5000; break;
-				default:         timeout_ms =  5000; break;
+				    case MEDIDA_1M:  timeout_ms = 1000; break;
+				    case MEDIDA_10K: timeout_ms = 1000; break;
+				    case MEDIDA_330: timeout_ms = 2000; break;
+				    default:         timeout_ms = 1000; break;
 				}
 
 				if (HAL_GetTick() - tick_timeout >= timeout_ms) {
