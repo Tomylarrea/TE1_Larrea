@@ -155,21 +155,25 @@ static void DUT_Configurar(tipo_medida_t medida) {
 		Set_Pin(GPIO1M_Pin, 1);
 		Set_Pin(GPIO10K_Pin, 0);
 		Set_Pin(GPIO330R_Pin, 0);
+		HAL_Delay(1);
 		break;
 	case MEDIDA_10K:
 		Set_Pin(GPIO1M_Pin, 0);
 		Set_Pin(GPIO10K_Pin, 1);
 		Set_Pin(GPIO330R_Pin, 0);
+		HAL_Delay(1);
 		break;
 	case MEDIDA_330:
 		Set_Pin(GPIO1M_Pin, 0);
 		Set_Pin(GPIO10K_Pin, 0);
 		Set_Pin(GPIO330R_Pin, 1);
+		HAL_Delay(1);
 		break;
 	case MEDIDA_OFF:
 		Set_Pin(GPIO1M_Pin, 0);
 		Set_Pin(GPIO10K_Pin, 0);
 		Set_Pin(GPIO330R_Pin, 0);
+		HAL_Delay(1);
 		break;
 	default:
 		break;
@@ -338,6 +342,7 @@ void DUT_Medir(void) {
 					timer_iniciado = 1;
 				}
 
+				uint32_t timeout_ms;
 				switch (medida_actual) {
 				    case MEDIDA_1M:  timeout_ms = 1000; break;
 				    case MEDIDA_10K: timeout_ms = 1000; break;
@@ -559,9 +564,11 @@ static void Descarga(uint8_t activar) {
 		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
 		HAL_GPIO_Init(GPIO_Descarga_GPIO_Port, &GPIO_InitStruct);
 		HAL_GPIO_WritePin(GPIO_Descarga_GPIO_Port, GPIO_Descarga_Pin, GPIO_PIN_RESET);
+		HAL_Delay(1);
 	} else {
 		GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
 		GPIO_InitStruct.Pull = GPIO_NOPULL;
 		HAL_GPIO_Init(GPIO_Descarga_GPIO_Port, &GPIO_InitStruct);
+		HAL_Delay(1);
 	}
 }
